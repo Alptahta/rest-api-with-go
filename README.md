@@ -11,3 +11,11 @@ If you start with this command it will backup data in every 5 seconds.
 go run main.go -backUp arg
 
 Arg takes integer. This will declare back up rate. Backup file will be created under /tmp with name of current time.
+
+# Store Data
+
+http://localhost:9001/set?key=alp&value=mugla
+
+# Get Data
+
+http://localhost:9001/get?key=alp

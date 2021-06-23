@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -140,10 +141,40 @@ func handleRequests(dictionaryH *dictionaryHandler) {
 	log.Fatal(http.ListenAndServe(":9001", mux))
 }
 
+func GetFilenameDate() string {
+	// Use layout string for time format.
+	const layout = "01-02-2006"
+	// Place now in the string.
+	t := time.Now()
+	return "" + t.Format(layout) + "-db.txt"
+}
+
 func (d *datastore) backUp() {
-	for range time.Tick(time.Second * 2) {
+	for range time.Tick(time.Second * 3) {
 		go func() {
 			fmt.Println(d.m)
+			b, err := json.Marshal(d.m)
+			if err != nil {
+				fmt.Println("error:", err)
+			}
+			fmt.Println(len(b))
+			// err2 := ioutil.WriteFile("/tmp/dat1", b, 0644)
+			// if err2 != nil {
+			// 	panic(err2)
+			// }
+
+			name := GetFilenameDate()
+			f, err := os.Create("/tmp/" + name)
+			if err != nil {
+				panic(err)
+			}
+			n2, err := f.Write(b)
+			if err != nil {
+				panic(err)
+			}
+			fmt.Printf("wrote %d bytes\n", n2)
+			defer f.Close()
+
 		}()
 	}
 }

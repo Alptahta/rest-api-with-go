@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"sync"
 	"time"
 )
+
+var BackupRating *int
 
 type item struct {
 	Value string `json:"value"`
@@ -141,7 +144,7 @@ func handleRequests(dictionaryH *dictionaryHandler) {
 	log.Fatal(http.ListenAndServe(":9001", mux))
 }
 
-func GetFilenameDate() string {
+func SetDateString() string {
 	// Use layout string for time format.
 	const layout = "01-02-2006"
 	// Place now in the string.
@@ -149,21 +152,18 @@ func GetFilenameDate() string {
 	return "" + t.Format(layout) + "-db.txt"
 }
 
+//Back-up data to file
 func (d *datastore) backUp() {
-	for range time.Tick(time.Second * 3) {
+	for range time.Tick(time.Second * time.Duration(*BackupRating)) {
 		go func() {
-			fmt.Println(d.m)
+			// fmt.Println(d.m)
 			b, err := json.Marshal(d.m)
 			if err != nil {
 				fmt.Println("error:", err)
 			}
-			fmt.Println(len(b))
-			// err2 := ioutil.WriteFile("/tmp/dat1", b, 0644)
-			// if err2 != nil {
-			// 	panic(err2)
-			// }
+			// fmt.Println(len(b))
 
-			name := GetFilenameDate()
+			name := SetDateString()
 			f, err := os.Create("/tmp/" + name)
 			if err != nil {
 				panic(err)
@@ -173,6 +173,7 @@ func (d *datastore) backUp() {
 				panic(err)
 			}
 			fmt.Printf("wrote %d bytes\n", n2)
+			log.Printf("File created under /tmp with name %s", name)
 			defer f.Close()
 
 		}()
@@ -180,6 +181,9 @@ func (d *datastore) backUp() {
 }
 
 func main() {
+	BackupRating = flag.Int("backUp", 5, "How many seconds should pass for after last backup to create new backup file. Default is 5")
+	flag.Parse()
+	fmt.Println(*BackupRating)
 
 	dictionaryH := &dictionaryHandler{
 		store: &datastore{

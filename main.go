@@ -7,11 +7,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 )
 
 var backupRating *int
+
+const errMarshaling string = "Error Happened while marshaling"
 
 type item struct {
 	Value string `json:"value"`
@@ -19,15 +20,10 @@ type item struct {
 
 type datastore struct {
 	m map[string]item
-	*sync.RWMutex
 }
 
 type dictionaryHandler struct {
 	store *datastore
-}
-
-type error struct {
-	Error string `json:"error"`
 }
 
 func (h *dictionaryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +37,7 @@ func (h *dictionaryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.Create(w, r)
 		return
 	default:
-		notFound(w, r)
+		notFound(w)
 		return
 	}
 }
@@ -49,24 +45,24 @@ func (h *dictionaryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *dictionaryHandler) Get(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
 
-	h.store.RLock()
 	v, ok := h.store.m[key]
-	h.store.RUnlock()
 
 	result := fmt.Sprintf("Item %s has been searched.", key)
 
 	if !ok {
-		notFound(w, r)
+		notFound(w)
 		return
 	}
 
 	jsonBytes, err := json.Marshal(v)
 	if err != nil {
-		internalServerError(w, r)
+		internalServerError(w)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write(jsonBytes)
+	if _, err = w.Write(jsonBytes); err != nil {
+		log.Fatal(err)
+	}
 
 	log.Println(result)
 }
@@ -83,57 +79,63 @@ func (h *dictionaryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	i.Value = value
-	h.store.Lock()
 	h.store.m[key] = i
-	h.store.Unlock()
 
 	result := fmt.Sprintf("Item %s has been created with value %s.", key, value)
 
 	jsonBytes, err := json.Marshal(i)
 	if err != nil {
-		internalServerError(w, r)
+		internalServerError(w)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write(jsonBytes)
+	if _, err = w.Write(jsonBytes); err != nil {
+		log.Fatal(err)
+	}
 
 	log.Println(result)
 }
 
-func internalServerError(w http.ResponseWriter, r *http.Request) {
-	error := error{"Internal Server Error"}
+func internalServerError(w http.ResponseWriter) {
+	error := "Internal Server Error"
 	jsonBytes, err := json.Marshal(error)
 	if err != nil {
-		log.Fatal("Error Happened while marshaling")
+		log.Fatal(errMarshaling)
 		return
 	}
 
 	w.WriteHeader(http.StatusInternalServerError)
-	w.Write(jsonBytes)
+	if _, err = w.Write(jsonBytes); err != nil {
+		log.Fatal(err)
+	}
 }
 
-func notFound(w http.ResponseWriter, r *http.Request) {
-	error := error{"Not Found"}
+func notFound(w http.ResponseWriter) {
+	error := "Not Found"
 	jsonBytes, err := json.Marshal(error)
 	if err != nil {
-		log.Fatal("Error Happened while marshaling")
+		log.Fatal(errMarshaling)
 		return
 	}
 
 	w.WriteHeader(http.StatusNotFound)
-	w.Write(jsonBytes)
+	if _, err = w.Write(jsonBytes); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func keyAlreadyExist(w http.ResponseWriter) {
-	error := error{"Key Already Exist"}
+	error := "Key Already Exist"
 	jsonBytes, err := json.Marshal(error)
 	if err != nil {
-		log.Fatal("Error Happened while marshaling")
+		log.Fatal(errMarshaling)
 		return
 	}
 
 	w.WriteHeader(http.StatusConflict)
-	w.Write(jsonBytes)
+	if _, err = w.Write(jsonBytes); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func handleRequests(dictionaryH *dictionaryHandler) {
@@ -146,54 +148,58 @@ func handleRequests(dictionaryH *dictionaryHandler) {
 
 func setDateString() string {
 	// Use layout string for time format.
-	const layout = "01-02-2006"
+	const layout = "01-02-2006 2:3:5"
 	// Place now in the string.
 	t := time.Now()
 	return "" + t.Format(layout) + "-db.txt"
 }
 
 //Back-up data to file
-func (d *datastore) backUp() {
-	for range time.Tick(time.Second * time.Duration(*backupRating)) {
-		go func() {
-			// fmt.Println(d.m)
-			b, err := json.Marshal(d.m)
-			if err != nil {
-				fmt.Println("error:", err)
-			}
-			// fmt.Println(len(b))
+func backUp(input <-chan map[string]item) {
 
-			name := setDateString()
-			f, err := os.Create("/tmp/" + name)
-			if err != nil {
-				panic(err)
-			}
-			n2, err := f.Write(b)
-			if err != nil {
-				panic(err)
-			}
-			fmt.Printf("wrote %d bytes\n", n2)
-			log.Printf("File created under /tmp with name %s", name)
-			defer f.Close()
+	for v := range input {
+		b, err := json.Marshal(v)
+		if err != nil {
+			fmt.Println("error:", err)
+		}
 
-		}()
+		name := setDateString()
+		f, err := os.Create("/tmp/" + name)
+		if err != nil {
+			panic(err)
+		}
+
+		n2, err := f.Write(b)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Printf("wrote %d bytes\n", n2)
+		log.Printf("File created under /tmp with name %s", name)
+		f.Close()
+
 	}
+
 }
 
 func main() {
-	backupRating = flag.Int("backUp", 5, "How many seconds should pass for after last backup to create new backup file. Default is 5")
+	const InitialBackUpRate int = 5
+	backupRating = flag.Int("backUp", InitialBackUpRate, "How many seconds should pass for after last backup to create new backup file. Default is 5")
 	flag.Parse()
-	fmt.Println(*backupRating)
 
 	dictionaryH := &dictionaryHandler{
 		store: &datastore{
-			m:       map[string]item{},
-			RWMutex: &sync.RWMutex{},
+			m: map[string]item{},
 		},
 	}
 
-	go dictionaryH.store.backUp()
+	go handleRequests(dictionaryH)
 
-	handleRequests(dictionaryH)
+	ch := make(chan map[string]item)
+	go backUp(ch)
+
+	for range time.Tick(time.Second * time.Duration(*backupRating)) {
+		ch <- dictionaryH.store.m
+	}
 
 }

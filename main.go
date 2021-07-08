@@ -144,7 +144,7 @@ func handleRequests(dictionaryH *dictionaryHandler) {
 	log.Fatal(http.ListenAndServe(":9001", mux))
 }
 
-func SetDateString() string {
+func setDateString() string {
 	// Use layout string for time format.
 	const layout = "01-02-2006"
 	// Place now in the string.
@@ -163,7 +163,7 @@ func (d *datastore) backUp() {
 			}
 			// fmt.Println(len(b))
 
-			name := SetDateString()
+			name := setDateString()
 			f, err := os.Create("/tmp/" + name)
 			if err != nil {
 				panic(err)

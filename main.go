@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-var BackupRating *int
+var backupRating *int
 
 type item struct {
 	Value string `json:"value"`
@@ -154,7 +154,7 @@ func SetDateString() string {
 
 //Back-up data to file
 func (d *datastore) backUp() {
-	for range time.Tick(time.Second * time.Duration(*BackupRating)) {
+	for range time.Tick(time.Second * time.Duration(*backupRating)) {
 		go func() {
 			// fmt.Println(d.m)
 			b, err := json.Marshal(d.m)
@@ -181,9 +181,9 @@ func (d *datastore) backUp() {
 }
 
 func main() {
-	BackupRating = flag.Int("backUp", 5, "How many seconds should pass for after last backup to create new backup file. Default is 5")
+	backupRating = flag.Int("backUp", 5, "How many seconds should pass for after last backup to create new backup file. Default is 5")
 	flag.Parse()
-	fmt.Println(*BackupRating)
+	fmt.Println(*backupRating)
 
 	dictionaryH := &dictionaryHandler{
 		store: &datastore{
